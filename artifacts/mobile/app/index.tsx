@@ -7,6 +7,8 @@ import { VoiceScreen } from "@/components/VoiceScreen";
 import { AutomationScreen } from "@/components/AutomationScreen";
 import { ProductivityScreen } from "@/components/ProductivityScreen";
 import { SettingsScreen } from "@/components/SettingsScreen";
+import { ImageGenScreen } from "@/components/ImageGenScreen";
+import { VideoGenScreen } from "@/components/VideoGenScreen";
 
 export default function MainApp() {
   const { currentScreen } = useApp();
@@ -19,6 +21,8 @@ export default function MainApp() {
     case "automation": return <AutomationScreen />;
     case "productivity": return <ProductivityScreen />;
     case "settings": return <SettingsScreen />;
+    case "imagegen": return <ImageGenScreen />;
+    case "videogen": return <VideoGenScreen />;
     default: return <HomeScreen />;
   }
 }

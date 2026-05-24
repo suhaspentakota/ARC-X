@@ -61,7 +61,7 @@ export function ProductivityScreen() {
   const ANALYTICS = [
     { label: "Focus Score", value: "87%", icon: "brain", color: colors.primary },
     { label: "Tasks Done", value: "12", icon: "checkmark-circle", color: colors.neonBlue },
-    { label: "AI Sessions", value: "8", icon: "chatbubble", color: colors.neonPurple },
+    { label: "Sessions", value: "8", icon: "chatbubble", color: colors.neonPurple },
     { label: "Notes", value: notes.length.toString(), icon: "document-text", color: colors.neonCyan },
   ];
 
@@ -95,11 +95,11 @@ export function ProductivityScreen() {
         <GlassCard style={styles.briefingCard}>
           <View style={styles.cardHeader}>
             <MaterialCommunityIcons name="brain" size={14} color={colors.primary} />
-            <Text style={[styles.cardTitle, { color: colors.mutedForeground }]}>  AI DAILY BRIEFING</Text>
+            <Text style={[styles.cardTitle, { color: colors.mutedForeground }]}>  DAILY BRIEFING</Text>
           </View>
           <Text style={[styles.briefingText, { color: colors.foreground }]}>
             Today's productivity score is above your weekly average. You're on track with high-priority tasks.
-            3 upcoming calendar events detected. AI recommends a 25-minute focus block before lunch.
+            3 upcoming calendar events detected. Recommended: a 25-minute focus block before lunch.
           </Text>
         </GlassCard>
 

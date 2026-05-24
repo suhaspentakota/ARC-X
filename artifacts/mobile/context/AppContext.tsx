@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useState } from "react";
 
-export type Screen = "splash" | "home" | "chat" | "voice" | "automation" | "productivity" | "settings";
+export type Screen =
+  | "splash" | "home" | "chat" | "voice"
+  | "automation" | "productivity" | "settings"
+  | "imagegen" | "videogen";
 
 export interface ChatMessage {
   id: string;
@@ -9,6 +11,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   streaming?: boolean;
+  imageUrl?: string;
 }
 
 export interface Task {
@@ -55,12 +58,14 @@ interface AppContextType {
   setAiPersonality: (p: string) => void;
   isStreaming: boolean;
   setIsStreaming: (v: boolean) => void;
+  selectedVoice: string;
+  setSelectedVoice: (v: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
 const DEFAULT_TASKS: Task[] = [
-  { id: "1", title: "Review AI briefing", completed: false, priority: "high", dueDate: "Today" },
+  { id: "1", title: "Review mission briefing", completed: false, priority: "high", dueDate: "Today" },
   { id: "2", title: "System optimization check", completed: true, priority: "medium" },
   { id: "3", title: "Schedule weekly sync", completed: false, priority: "low", dueDate: "Tomorrow" },
 ];
@@ -86,6 +91,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState("Commander");
   const [aiPersonality, setAiPersonality] = useState("Professional");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState("Nova");
 
   return (
     <AppContext.Provider value={{
@@ -99,6 +105,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       userName, setUserName,
       aiPersonality, setAiPersonality,
       isStreaming, setIsStreaming,
+      selectedVoice, setSelectedVoice,
     }}>
       {children}
     </AppContext.Provider>

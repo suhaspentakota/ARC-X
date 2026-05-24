@@ -4,7 +4,7 @@ import {
   TextInput, Switch, Platform
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons, Feather } from "@expo/vector-icons";
+import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { GlassCard } from "./GlassCard";
@@ -13,11 +13,36 @@ import { useApp } from "@/context/AppContext";
 const PERSONALITIES = ["Professional", "Casual", "Focused", "Creative", "Analytical"];
 const VOICES = ["Nova", "Alloy", "Echo", "Fable", "Onyx", "Shimmer"];
 
+const TEST_PHRASES = [
+  "ARC X systems are fully operational.",
+  "Neural core is online and ready.",
+  "Intelligence, evolved.",
+];
+
+function testVoice(voiceName: string) {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const phrase = TEST_PHRASES[Math.floor(Math.random() * TEST_PHRASES.length)];
+  const utterance = new SpeechSynthesisUtterance(phrase);
+  const voices = window.speechSynthesis.getVoices();
+  const keywords: Record<string, string[]> = {
+    Nova: ["nova", "samantha", "zoe", "ava"],
+    Alloy: ["alloy", "kate", "victoria"],
+    Echo: ["echo", "alex", "daniel", "fred"],
+    Fable: ["fable", "karen", "serena"],
+    Onyx: ["onyx", "james", "thomas"],
+    Shimmer: ["shimmer", "tessa", "moira"],
+  };
+  const kws = keywords[voiceName] || [];
+  const match = voices.find(v => kws.some(k => v.name.toLowerCase().includes(k)));
+  if (match) utterance.voice = match;
+  window.speechSynthesis.speak(utterance);
+}
+
 export function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { setCurrentScreen, userName, setUserName, aiPersonality, setAiPersonality } = useApp();
-  const [selectedVoice, setSelectedVoice] = useState("Nova");
+  const { setCurrentScreen, userName, setUserName, aiPersonality, setAiPersonality, selectedVoice, setSelectedVoice } = useApp();
   const [notifications, setNotifications] = useState(true);
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [autoSuggest, setAutoSuggest] = useState(true);
@@ -81,18 +106,15 @@ export function SettingsScreen() {
           </View>
         </GlassCard>
 
-        <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>AI PERSONALITY</Text>
+        <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>PERSONALITY</Text>
         <View style={styles.chipsRow}>
           {PERSONALITIES.map(p => (
             <TouchableOpacity
               key={p}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: aiPersonality === p ? colors.primary : colors.surface,
-                  borderColor: aiPersonality === p ? colors.primary : `rgba(0, 212, 255, 0.2)`,
-                }
-              ]}
+              style={[styles.chip, {
+                backgroundColor: aiPersonality === p ? colors.primary : colors.surface,
+                borderColor: aiPersonality === p ? colors.primary : `rgba(0, 212, 255, 0.2)`,
+              }]}
               onPress={() => {
                 setAiPersonality(p);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -106,33 +128,46 @@ export function SettingsScreen() {
         </View>
 
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground, marginTop: 24 }]}>VOICE</Text>
-        <View style={styles.chipsRow}>
+        <View style={styles.voiceGrid}>
           {VOICES.map(v => (
-            <TouchableOpacity
-              key={v}
-              style={[
-                styles.chip,
-                {
+            <View key={v} style={styles.voiceRow}>
+              <TouchableOpacity
+                style={[styles.voiceChip, {
                   backgroundColor: selectedVoice === v ? colors.neonPurple : colors.surface,
                   borderColor: selectedVoice === v ? colors.neonPurple : `rgba(0, 212, 255, 0.2)`,
-                }
-              ]}
-              onPress={() => {
-                setSelectedVoice(v);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <Text style={[styles.chipText, { color: selectedVoice === v ? "#ffffff" : colors.mutedForeground }]}>
-                {v}
-              </Text>
-            </TouchableOpacity>
+                  flex: 1,
+                }]}
+                onPress={() => {
+                  setSelectedVoice(v);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="waveform"
+                  size={13}
+                  color={selectedVoice === v ? "#ffffff" : colors.mutedForeground}
+                />
+                <Text style={[styles.chipText, { color: selectedVoice === v ? "#ffffff" : colors.mutedForeground }]}>
+                  {v}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.testBtn, { borderColor: `rgba(0, 212, 255, 0.25)`, backgroundColor: colors.surface }]}
+                onPress={() => {
+                  testVoice(v);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Ionicons name="play" size={12} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           ))}
         </View>
 
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground, marginTop: 24 }]}>PREFERENCES</Text>
         <GlassCard style={styles.settingsGroup} padding={0}>
           {[
-            { label: "Smart Notifications", sub: "AI-curated alerts", value: notifications, setter: setNotifications },
+            { label: "Smart Notifications", sub: "Context-aware alerts", value: notifications, setter: setNotifications },
             { label: "Conversation Memory", sub: "Remember past sessions", value: memoryEnabled, setter: setMemoryEnabled },
             { label: "Auto Suggestions", sub: "Proactive recommendations", value: autoSuggest, setter: setAutoSuggest },
           ].map((item, i, arr) => (
@@ -191,21 +226,17 @@ export function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 212, 255, 0.1)",
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: "rgba(0, 212, 255, 0.1)",
   },
   backBtn: { padding: 4 },
   headerTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", letterSpacing: 4 },
   scroll: { paddingHorizontal: 20, paddingTop: 20 },
   profileCard: { flexDirection: "row", alignItems: "center", marginBottom: 28, gap: 16 },
   profileAvatar: {
-    width: 60, height: 60, borderRadius: 30,
-    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
+    width: 60, height: 60, borderRadius: 30, borderWidth: 1.5,
+    alignItems: "center", justifyContent: "center",
   },
   profileAvatarText: { fontSize: 20, fontFamily: "Inter_700Bold" },
   profileInfo: { flex: 1 },
@@ -223,12 +254,20 @@ const styles = StyleSheet.create({
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  voiceGrid: { gap: 8, marginBottom: 4 },
+  voiceRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  voiceChip: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1,
+  },
+  testBtn: {
+    width: 36, height: 36, borderRadius: 10, borderWidth: 1,
+    alignItems: "center", justifyContent: "center",
+  },
   settingsGroup: { marginBottom: 4, borderRadius: 16, overflow: "hidden" },
   settingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 14,
   },
   settingInfo: { flex: 1 },
   settingLabel: { fontSize: 14, fontFamily: "Inter_500Medium" },

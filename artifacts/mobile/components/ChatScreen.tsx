@@ -1,11 +1,11 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   Platform, Keyboard, Animated, ActivityIndicator, Dimensions
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native";
-import { Ionicons, Feather } from "@expo/vector-icons";
+import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useApp, ChatMessage } from "@/context/AppContext";
@@ -18,11 +18,55 @@ const SUGGESTIONS = [
   "What can you help me with?",
   "Give me a productivity tip",
   "Explain quantum computing",
-  "Write a haiku about AI",
+  "Generate an image of a nebula",
 ];
+
+function AnimatedMessageBubble({ msg, colors }: { msg: ChatMessage; colors: any }) {
+  const slideY = useRef(new Animated.Value(16)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.spring(slideY, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY: slideY }] }}>
+      <MessageBubble msg={msg} colors={colors} />
+    </Animated.View>
+  );
+}
 
 function MessageBubble({ msg, colors }: { msg: ChatMessage; colors: any }) {
   const isUser = msg.role === "user";
+  if (msg.imageUrl) {
+    return (
+      <View style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAI]}>
+        {!isUser && (
+          <View style={[styles.aiAvatar, { backgroundColor: colors.glowSoft, borderColor: `rgba(0, 212, 255, 0.3)` }]}>
+            <Text style={[styles.aiAvatarText, { color: colors.primary }]}>X</Text>
+          </View>
+        )}
+        <View style={styles.imageContainer}>
+          <Text style={[styles.imagePromptLabel, { color: colors.mutedForeground }]}>Generated image</Text>
+          <View style={[styles.imagePlaceholder, { borderColor: `rgba(0, 212, 255, 0.3)`, backgroundColor: colors.surface }]}>
+            {msg.imageUrl === "loading" ? (
+              <View style={styles.imageLoadingWrap}>
+                <ActivityIndicator color={colors.primary} size="large" />
+                <Text style={[styles.imageLoadingText, { color: colors.mutedForeground }]}>Generating image...</Text>
+              </View>
+            ) : msg.imageUrl === "error" ? (
+              <Text style={[styles.imageErrorText, { color: colors.destructive }]}>Image generation failed</Text>
+            ) : (
+              <GeneratedImage base64={msg.imageUrl} colors={colors} />
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAI]}>
       {!isUser && (
@@ -46,17 +90,45 @@ function MessageBubble({ msg, colors }: { msg: ChatMessage; colors: any }) {
           </Text>
         )}
         {msg.streaming && msg.content !== "" && (
-          <View style={[styles.streamCursor, { backgroundColor: colors.primary }]} />
+          <StreamCursor colors={colors} />
         )}
       </View>
     </View>
   );
 }
 
+function GeneratedImage({ base64, colors }: { base64: string; colors: any }) {
+  const { Image } = require("react-native");
+  return (
+    <Image
+      source={{ uri: `data:image/png;base64,${base64}` }}
+      style={styles.generatedImg}
+      resizeMode="cover"
+    />
+  );
+}
+
+function StreamCursor({ colors }: { colors: any }) {
+  const blink = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(blink, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 1, duration: 400, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  return <Animated.View style={[styles.streamCursor, { backgroundColor: colors.primary, opacity: blink }]} />;
+}
+
 function TypingDots({ colors }: { colors: any }) {
-  const dots = [useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current];
-  React.useEffect(() => {
-    dots.forEach((d, i) => {
+  const dotsRef = useRef([
+    new Animated.Value(0.3),
+    new Animated.Value(0.3),
+    new Animated.Value(0.3),
+  ]);
+  useEffect(() => {
+    dotsRef.current.forEach((d, i) => {
       Animated.loop(Animated.sequence([
         Animated.delay(i * 180),
         Animated.timing(d, { toValue: 1, duration: 400, useNativeDriver: true }),
@@ -66,7 +138,7 @@ function TypingDots({ colors }: { colors: any }) {
   }, []);
   return (
     <View style={styles.dotsRow}>
-      {dots.map((d, i) => (
+      {dotsRef.current.map((d, i) => (
         <Animated.View key={i} style={[styles.dot, { backgroundColor: colors.primary, opacity: d }]} />
       ))}
     </View>
@@ -93,11 +165,50 @@ export function ChatScreen() {
     return data.id;
   }, [conversationId]);
 
+  const generateImage = useCallback(async (prompt: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const imgMsgId = Date.now().toString();
+    const imgMsg: ChatMessage = {
+      id: imgMsgId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+      imageUrl: "loading",
+    };
+    setMessages(prev => [...prev, imgMsg]);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/openai/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      setMessages(prev => prev.map(m => m.id === imgMsgId ? { ...m, imageUrl: data.b64_json } : m));
+    } catch {
+      setMessages(prev => prev.map(m => m.id === imgMsgId ? { ...m, imageUrl: "error" } : m));
+    }
+  }, []);
+
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isStreaming) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
     setInputText("");
+
+    const lower = text.toLowerCase();
+    if (lower.includes("generate image") || lower.includes("create image") || lower.includes("draw") || lower.includes("generate a picture")) {
+      const prompt = text.replace(/generate\s+(an?\s+)?image\s+(of\s+)?/i, "")
+        .replace(/create\s+(an?\s+)?image\s+(of\s+)?/i, "")
+        .replace(/draw\s+(an?\s+)?/i, "")
+        .replace(/generate\s+(a\s+)?picture\s+(of\s+)?/i, "")
+        .trim() || text;
+
+      const userMsg: ChatMessage = { id: Date.now().toString(), role: "user", content: text.trim(), timestamp: new Date() };
+      setMessages(prev => [...prev, userMsg]);
+      await generateImage(prompt);
+      return;
+    }
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -151,13 +262,14 @@ export function ChatScreen() {
                   setMessages(prev =>
                     prev.map(m => m.id === aiMsgId ? { ...m, streaming: false } : m)
                   );
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }
               } catch {}
             }
           }
         }
       }
-    } catch (e) {
+    } catch {
       setMessages(prev =>
         prev.map(m => m.id === aiMsgId
           ? { ...m, content: "Connection error. Please try again.", streaming: false }
@@ -166,7 +278,7 @@ export function ChatScreen() {
     } finally {
       setIsStreaming(false);
     }
-  }, [isStreaming, getOrCreateConversation]);
+  }, [isStreaming, getOrCreateConversation, generateImage]);
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
@@ -192,19 +304,13 @@ export function ChatScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior="padding"
-        keyboardVerticalOffset={0}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={0}>
         {messages.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={[styles.emptyOrb, { borderColor: `rgba(0, 212, 255, 0.2)` }]}>
               <Text style={[styles.emptyOrbText, { color: colors.primary }]}>X</Text>
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-              Hello, {userName}.
-            </Text>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Hello, {userName}.</Text>
             <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
               How can I assist you today?
             </Text>
@@ -230,12 +336,24 @@ export function ChatScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
-            renderItem={({ item }) => <MessageBubble msg={item} colors={colors} />}
+            renderItem={({ item }) => <AnimatedMessageBubble msg={item} colors={colors} />}
           />
         )}
 
         <View style={[styles.inputArea, { paddingBottom: bottomPad + 8, borderTopColor: `rgba(0, 212, 255, 0.12)` }]}>
           <View style={[styles.inputRow, { backgroundColor: colors.surface, borderColor: `rgba(0, 212, 255, 0.25)` }]}>
+            <TouchableOpacity
+              style={styles.imgBtn}
+              onPress={() => {
+                const prompt = inputText.trim() || "futuristic cityscape at night, neon lights, cinematic";
+                setInputText("");
+                const userMsg: ChatMessage = { id: Date.now().toString(), role: "user", content: `Generate image: ${prompt}`, timestamp: new Date() };
+                setMessages(prev => [...prev, userMsg]);
+                generateImage(prompt);
+              }}
+            >
+              <MaterialCommunityIcons name="image-plus" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
             <TextInput
               style={[styles.input, { color: colors.foreground }]}
               placeholder="Message ARC X..."
@@ -249,10 +367,7 @@ export function ChatScreen() {
               editable={!isStreaming}
             />
             <TouchableOpacity
-              style={[
-                styles.sendBtn,
-                { backgroundColor: isStreaming || !inputText.trim() ? colors.muted : colors.primary }
-              ]}
+              style={[styles.sendBtn, { backgroundColor: isStreaming || !inputText.trim() ? colors.muted : colors.primary }]}
               onPress={() => sendMessage(inputText)}
               disabled={isStreaming || !inputText.trim()}
             >
@@ -271,12 +386,9 @@ export function ChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 212, 255, 0.1)",
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: "rgba(0, 212, 255, 0.1)",
   },
   backBtn: { padding: 4 },
   headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
@@ -301,6 +413,16 @@ const styles = StyleSheet.create({
   typingRow: { paddingVertical: 4 },
   dotsRow: { flexDirection: "row", gap: 5, alignItems: "center" },
   dot: { width: 7, height: 7, borderRadius: 3.5 },
+  imageContainer: { maxWidth: "85%" },
+  imagePromptLabel: { fontSize: 10, fontFamily: "Inter_400Regular", letterSpacing: 0.5, marginBottom: 6 },
+  imagePlaceholder: {
+    borderRadius: 12, borderWidth: 1, overflow: "hidden",
+    minHeight: 180,
+  },
+  imageLoadingWrap: { padding: 32, alignItems: "center", gap: 12 },
+  imageLoadingText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  imageErrorText: { padding: 20, fontSize: 13, fontFamily: "Inter_400Regular" },
+  generatedImg: { width: 260, height: 260 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
   emptyOrb: {
     width: 72, height: 72, borderRadius: 36,
@@ -310,31 +432,18 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 22, fontFamily: "Inter_600SemiBold", marginBottom: 8 },
   emptySubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", marginBottom: 32 },
   suggestions: { alignSelf: "stretch", gap: 10 },
-  suggestion: {
-    padding: 14, borderRadius: 12, borderWidth: 1,
-  },
+  suggestion: { padding: 14, borderRadius: 12, borderWidth: 1 },
   suggestionText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  inputArea: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    borderTopWidth: 1,
-  },
+  inputArea: { paddingHorizontal: 16, paddingTop: 10, borderTopWidth: 1 },
   inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingLeft: 16,
-    paddingRight: 6,
-    paddingVertical: 6,
-    gap: 8,
+    flexDirection: "row", alignItems: "flex-end",
+    borderRadius: 20, borderWidth: 1,
+    paddingLeft: 8, paddingRight: 6, paddingVertical: 6, gap: 6,
   },
+  imgBtn: { padding: 8, justifyContent: "center" },
   input: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    maxHeight: 100,
-    paddingVertical: 6,
+    flex: 1, fontSize: 14, fontFamily: "Inter_400Regular",
+    maxHeight: 100, paddingVertical: 6,
   },
   sendBtn: {
     width: 36, height: 36, borderRadius: 18,
