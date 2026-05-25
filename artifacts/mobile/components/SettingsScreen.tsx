@@ -13,6 +13,7 @@ import { createSpeechUtterance, PRESET_VOICES, isSpeechSynthesisAvailable } from
 
 const PERSONALITIES = ["Professional", "Casual", "Focused", "Creative", "Analytical"];
 const VOICES = PRESET_VOICES.map(v => v.name);
+type AdjustableVoiceKey = keyof Pick<VoiceSettings, "rate" | "pitch" | "volume" | "expressiveness">;
 
 const TEST_PHRASES = [
   "ARC X systems are fully operational.",
@@ -60,10 +61,10 @@ export function SettingsScreen() {
     setEditingName(false);
   };
 
-  const adjustVoiceSetting = (key: keyof Pick<VoiceSettings, "rate" | "pitch" | "volume" | "expressiveness">, delta: number, min: number, max: number) => {
+  const adjustVoiceSetting = (key: AdjustableVoiceKey, delta: number, min: number, max: number) => {
     setVoiceSettings(prev => ({
       ...prev,
-      [key]: Math.min(max, Math.max(min, Number((prev[key] + delta).toFixed(2)))),
+      [key]: Math.round(Math.min(max, Math.max(min, prev[key] + delta)) * 10) / 10,
     }));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -185,14 +186,21 @@ export function SettingsScreen() {
               <View style={styles.talknessControl}>
                 <TouchableOpacity
                   style={[styles.adjustBtn, { borderColor: `rgba(0, 212, 255, 0.22)`, backgroundColor: colors.surface }]}
-                  onPress={() => adjustVoiceSetting(item.key as keyof Pick<VoiceSettings, "rate" | "pitch" | "volume" | "expressiveness">, -item.step, item.min, item.max)}
+                  accessibilityLabel={`Decrease ${item.label}`}
+                  onPress={() => adjustVoiceSetting(item.key as AdjustableVoiceKey, -item.step, item.min, item.max)}
                 >
                   <Ionicons name="remove" size={14} color={colors.primary} />
                 </TouchableOpacity>
-                <Text style={[styles.talknessValue, { color: colors.foreground }]}>{item.value.toFixed(1)}</Text>
+                <Text
+                  style={[styles.talknessValue, { color: colors.foreground }]}
+                  accessibilityLabel={`${item.label}: ${item.value.toFixed(1)}`}
+                >
+                  {item.value.toFixed(1)}
+                </Text>
                 <TouchableOpacity
                   style={[styles.adjustBtn, { borderColor: `rgba(0, 212, 255, 0.22)`, backgroundColor: colors.surface }]}
-                  onPress={() => adjustVoiceSetting(item.key as keyof Pick<VoiceSettings, "rate" | "pitch" | "volume" | "expressiveness">, item.step, item.min, item.max)}
+                  accessibilityLabel={`Increase ${item.label}`}
+                  onPress={() => adjustVoiceSetting(item.key as AdjustableVoiceKey, item.step, item.min, item.max)}
                 >
                   <Ionicons name="add" size={14} color={colors.primary} />
                 </TouchableOpacity>

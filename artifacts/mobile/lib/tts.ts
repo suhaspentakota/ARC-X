@@ -15,9 +15,13 @@ export const PRESET_VOICES: VoicePreset[] = [
   { name: "Shimmer", lang: "en-AU", keywords: ["shimmer", "moira", "tessa", "google australian english"] },
 ];
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const EXPRESSIVENESS_RATE_MULTIPLIER = 0.08;
 const EXPRESSIVENESS_PITCH_MULTIPLIER = 0.15;
+
+const applyExpressiveness = (baseValue: number, styleBoost: number, multiplier: number) => {
+  return baseValue * (1 + styleBoost * multiplier);
+};
 
 export function isSpeechSynthesisAvailable() {
   return typeof window !== "undefined" && !!window.speechSynthesis;
@@ -51,10 +55,10 @@ export function createSpeechUtterance(
     if (match) utterance.voice = match;
   }
 
-  const styleBoost = clamp(settings.expressiveness, 0, 1);
-  utterance.rate = clamp(settings.rate * (1 + styleBoost * EXPRESSIVENESS_RATE_MULTIPLIER), 0.5, 2);
-  utterance.pitch = clamp(settings.pitch * (1 + styleBoost * EXPRESSIVENESS_PITCH_MULTIPLIER), 0, 2);
-  utterance.volume = clamp(settings.volume, 0, 1);
+  const styleBoost = clampValue(settings.expressiveness, 0, 1);
+  utterance.rate = clampValue(applyExpressiveness(settings.rate, styleBoost, EXPRESSIVENESS_RATE_MULTIPLIER), 0.5, 2);
+  utterance.pitch = clampValue(applyExpressiveness(settings.pitch, styleBoost, EXPRESSIVENESS_PITCH_MULTIPLIER), 0, 2);
+  utterance.volume = clampValue(settings.volume, 0, 1);
   utterance.onstart = handlers?.onStart ?? null;
   utterance.onend = handlers?.onEnd ?? null;
   utterance.onerror = handlers?.onError ?? null;

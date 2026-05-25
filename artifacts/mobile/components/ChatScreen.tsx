@@ -22,6 +22,8 @@ const SUGGESTIONS = [
   "Explain quantum computing",
   "Generate an image of a nebula",
 ];
+const DEFAULT_FALLBACK_MESSAGE = "I received your request.";
+const MIN_REVEAL_CHUNK_SIZE = 3;
 const REVEAL_CHUNKS = 36;
 const REVEAL_FRAME_MS = 18;
 
@@ -229,13 +231,16 @@ export function ChatScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => {
-    if (revealTimeoutRef.current) {
-      clearTimeout(revealTimeoutRef.current);
-    }
-    if (isSpeechSynthesisAvailable()) {
-      window.speechSynthesis.cancel();
-    }
+  useEffect(() => {
+    const cleanup = () => {
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+      }
+      if (isSpeechSynthesisAvailable()) {
+        window.speechSynthesis.cancel();
+      }
+    };
+    return cleanup;
   }, []);
 
   const getOrCreateConversation = useCallback(async (): Promise<number> => {
@@ -277,11 +282,15 @@ export function ChatScreen() {
 
   const speakAssistantReply = useCallback((messageId: string, text: string) => {
     if (!voiceSettings.autoSpeakResponses || !text.trim() || !isSpeechSynthesisAvailable()) return;
+    const clearSpeakingIndicator = () => {
+      setSpeakingMessageId(prev => (prev === messageId ? null : prev));
+    };
+    setSpeakingMessageId(null);
     window.speechSynthesis.cancel();
     const utterance = createSpeechUtterance(text, selectedVoice, voiceSettings, {
       onStart: () => setSpeakingMessageId(messageId),
-      onEnd: () => setSpeakingMessageId(prev => (prev === messageId ? null : prev)),
-      onError: () => setSpeakingMessageId(prev => (prev === messageId ? null : prev)),
+      onEnd: clearSpeakingIndicator,
+      onError: clearSpeakingIndicator,
     });
     if (!utterance) return;
     window.speechSynthesis.speak(utterance);
@@ -293,7 +302,10 @@ export function ChatScreen() {
       return;
     }
 
-    const chunkSize = Math.max(1, Math.round(fullText.length / REVEAL_CHUNKS));
+    const chunkSize = Math.max(
+      MIN_REVEAL_CHUNK_SIZE,
+      Math.ceil(fullText.length / REVEAL_CHUNKS)
+    );
     let index = 0;
     await new Promise<void>((resolve) => {
       const tick = () => {
@@ -392,8 +404,9 @@ export function ChatScreen() {
         }
       } else {
         const fallbackText = await response.text();
-        await revealAssistantReply(aiMsgId, fallbackText || "I received your request.");
-        speakAssistantReply(aiMsgId, fallbackText || "I received your request.");
+        const resolvedFallback = fallbackText || DEFAULT_FALLBACK_MESSAGE;
+        await revealAssistantReply(aiMsgId, resolvedFallback);
+        speakAssistantReply(aiMsgId, resolvedFallback);
       }
     } catch {
       setMessages(prev =>

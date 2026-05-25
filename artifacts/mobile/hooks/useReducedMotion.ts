@@ -7,7 +7,11 @@ export function useReducedMotion() {
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled()
       .then(setReducedMotion)
-      .catch(() => {});
+      .catch((error) => {
+        if (__DEV__) {
+          console.warn("Failed to read reduce-motion preference", error);
+        }
+      });
 
     const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReducedMotion);
     return () => subscription.remove();
