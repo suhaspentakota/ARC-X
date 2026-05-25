@@ -32,6 +32,17 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 
 _Describe the high-level user-facing capabilities of this app once they exist._
 
+## Voice settings and response animations
+
+- Voice controls live in `artifacts/mobile/components/SettingsScreen.tsx` under **VOICE** → **Talkness**.
+- Supported presets: `Nova`, `Alloy`, `Echo`, `Fable`, `Onyx`, `Shimmer`.
+- Talkness controls are persisted with AsyncStorage (`rate`, `pitch`, `volume`, `expressiveness`, `auto speak responses`) in `AppContext`.
+- TTS playback is powered by the browser Web Speech API when available (`window.speechSynthesis`).
+  - No API key is required for Web Speech API.
+  - If speech synthesis is unavailable on a device/runtime, ARC X continues showing text responses without audio.
+- Chat responses include streaming cursor/typing effects, fallback reveal animation for non-stream responses, and a speaking indicator tied to TTS playback state.
+- Motion-sensitive users are respected via `AccessibilityInfo.isReduceMotionEnabled()` (`useReducedMotion` hook).
+
 ## User preferences
 
 _Populate as you build — explicit user instructions worth remembering across sessions._

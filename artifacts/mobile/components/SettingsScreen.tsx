@@ -8,10 +8,11 @@ import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { GlassCard } from "./GlassCard";
-import { useApp } from "@/context/AppContext";
+import { useApp, VoiceSettings } from "@/context/AppContext";
+import { createSpeechUtterance, PRESET_VOICES, isSpeechSynthesisAvailable } from "@/lib/tts";
 
 const PERSONALITIES = ["Professional", "Casual", "Focused", "Creative", "Analytical"];
-const VOICES = ["Nova", "Alloy", "Echo", "Fable", "Onyx", "Shimmer"];
+const VOICES = PRESET_VOICES.map(v => v.name);
 
 const TEST_PHRASES = [
   "ARC X systems are fully operational.",
@@ -19,30 +20,29 @@ const TEST_PHRASES = [
   "Intelligence, evolved.",
 ];
 
-function testVoice(voiceName: string) {
-  if (typeof window === "undefined" || !window.speechSynthesis) return;
+function testVoice(voiceName: string, voiceSettings: VoiceSettings) {
+  if (!isSpeechSynthesisAvailable()) return;
   window.speechSynthesis.cancel();
   const phrase = TEST_PHRASES[Math.floor(Math.random() * TEST_PHRASES.length)];
-  const utterance = new SpeechSynthesisUtterance(phrase);
-  const voices = window.speechSynthesis.getVoices();
-  const keywords: Record<string, string[]> = {
-    Nova: ["nova", "samantha", "zoe", "ava"],
-    Alloy: ["alloy", "kate", "victoria"],
-    Echo: ["echo", "alex", "daniel", "fred"],
-    Fable: ["fable", "karen", "serena"],
-    Onyx: ["onyx", "james", "thomas"],
-    Shimmer: ["shimmer", "tessa", "moira"],
-  };
-  const kws = keywords[voiceName] || [];
-  const match = voices.find(v => kws.some(k => v.name.toLowerCase().includes(k)));
-  if (match) utterance.voice = match;
+  const utterance = createSpeechUtterance(phrase, voiceName, voiceSettings);
+  if (!utterance) return;
   window.speechSynthesis.speak(utterance);
 }
 
 export function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { setCurrentScreen, userName, setUserName, aiPersonality, setAiPersonality, selectedVoice, setSelectedVoice } = useApp();
+  const {
+    setCurrentScreen,
+    userName,
+    setUserName,
+    aiPersonality,
+    setAiPersonality,
+    selectedVoice,
+    setSelectedVoice,
+    voiceSettings,
+    setVoiceSettings,
+  } = useApp();
   const [notifications, setNotifications] = useState(true);
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [autoSuggest, setAutoSuggest] = useState(true);
@@ -58,6 +58,14 @@ export function SettingsScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     setEditingName(false);
+  };
+
+  const adjustVoiceSetting = (key: keyof Pick<VoiceSettings, "rate" | "pitch" | "volume" | "expressiveness">, delta: number, min: number, max: number) => {
+    setVoiceSettings(prev => ({
+      ...prev,
+      [key]: Math.min(max, Math.max(min, Number((prev[key] + delta).toFixed(2)))),
+    }));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   return (
@@ -154,7 +162,7 @@ export function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.testBtn, { borderColor: `rgba(0, 212, 255, 0.25)`, backgroundColor: colors.surface }]}
                 onPress={() => {
-                  testVoice(v);
+                  testVoice(v, voiceSettings);
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
               >
@@ -163,6 +171,55 @@ export function SettingsScreen() {
             </View>
           ))}
         </View>
+
+        <GlassCard style={styles.talknessCard}>
+          <Text style={[styles.talknessTitle, { color: colors.foreground }]}>Talkness</Text>
+          {[
+            { key: "rate", label: "Rate", value: voiceSettings.rate, min: 0.6, max: 1.6, step: 0.1 },
+            { key: "pitch", label: "Pitch", value: voiceSettings.pitch, min: 0.5, max: 1.8, step: 0.1 },
+            { key: "volume", label: "Volume", value: voiceSettings.volume, min: 0.2, max: 1, step: 0.1 },
+            { key: "expressiveness", label: "Style", value: voiceSettings.expressiveness, min: 0, max: 1, step: 0.1 },
+          ].map(item => (
+            <View key={item.key} style={styles.talknessRow}>
+              <Text style={[styles.talknessLabel, { color: colors.mutedForeground }]}>{item.label}</Text>
+              <View style={styles.talknessControl}>
+                <TouchableOpacity
+                  style={[styles.adjustBtn, { borderColor: `rgba(0, 212, 255, 0.22)`, backgroundColor: colors.surface }]}
+                  onPress={() => adjustVoiceSetting(item.key as keyof Pick<VoiceSettings, "rate" | "pitch" | "volume" | "expressiveness">, -item.step, item.min, item.max)}
+                >
+                  <Ionicons name="remove" size={14} color={colors.primary} />
+                </TouchableOpacity>
+                <Text style={[styles.talknessValue, { color: colors.foreground }]}>{item.value.toFixed(1)}</Text>
+                <TouchableOpacity
+                  style={[styles.adjustBtn, { borderColor: `rgba(0, 212, 255, 0.22)`, backgroundColor: colors.surface }]}
+                  onPress={() => adjustVoiceSetting(item.key as keyof Pick<VoiceSettings, "rate" | "pitch" | "volume" | "expressiveness">, item.step, item.min, item.max)}
+                >
+                  <Ionicons name="add" size={14} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+          <View style={[styles.autoSpeakRow, { borderTopColor: `rgba(0, 212, 255, 0.12)` }]}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingLabel, { color: colors.foreground }]}>Auto speak responses</Text>
+              <Text style={[styles.settingSub, { color: colors.mutedForeground }]}>Read assistant replies aloud</Text>
+            </View>
+            <Switch
+              value={voiceSettings.autoSpeakResponses}
+              onValueChange={value => {
+                setVoiceSettings(prev => ({ ...prev, autoSpeakResponses: value }));
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              trackColor={{ false: colors.muted, true: colors.glowMedium }}
+              thumbColor={voiceSettings.autoSpeakResponses ? colors.primary : colors.mutedForeground}
+            />
+          </View>
+          {!isSpeechSynthesisAvailable() && (
+            <Text style={[styles.ttsNotice, { color: colors.mutedForeground }]}>
+              Speech synthesis is unavailable on this device. Text responses still work normally.
+            </Text>
+          )}
+        </GlassCard>
 
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground, marginTop: 24 }]}>PREFERENCES</Text>
         <GlassCard style={styles.settingsGroup} padding={0}>
@@ -264,6 +321,27 @@ const styles = StyleSheet.create({
     width: 36, height: 36, borderRadius: 10, borderWidth: 1,
     alignItems: "center", justifyContent: "center",
   },
+  talknessCard: { marginTop: 12, gap: 10 },
+  talknessTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  talknessRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  talknessLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  talknessControl: { flexDirection: "row", alignItems: "center", gap: 10 },
+  adjustBtn: {
+    width: 30, height: 30, borderRadius: 8, borderWidth: 1,
+    alignItems: "center", justifyContent: "center",
+  },
+  talknessValue: { minWidth: 34, textAlign: "center", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  autoSpeakRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 10,
+    borderTopWidth: 1,
+  },
+  ttsNotice: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
   settingsGroup: { marginBottom: 4, borderRadius: 16, overflow: "hidden" },
   settingRow: {
     flexDirection: "row", alignItems: "center",

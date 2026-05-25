@@ -7,8 +7,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { ArcOrb } from "./ArcOrb";
 import { useApp } from "@/context/AppContext";
+import { PRESET_VOICES, createSpeechUtterance, isSpeechSynthesisAvailable } from "@/lib/tts";
 
 const { width } = Dimensions.get("window");
 
@@ -27,28 +29,20 @@ const STATE_LABELS: Record<VoiceState, string> = {
 
 const BAR_COUNT = 24;
 
-const PRESET_VOICES = [
-  { name: "Nova", lang: "en-US", keywords: ["nova", "samantha", "zoe", "ava"] },
-  { name: "Echo", lang: "en-US", keywords: ["echo", "alex", "daniel", "fred"] },
-  { name: "Fable", lang: "en-GB", keywords: ["fable", "kate", "serena", "moira"] },
-  { name: "Onyx", lang: "en-US", keywords: ["onyx", "james", "thomas", "lee"] },
-  { name: "Shimmer", lang: "en-AU", keywords: ["shimmer", "karen", "tessa", "victoria"] },
-];
-
 const TEST_PHRASES = [
   "ARC X systems are fully operational.",
   "Neural core is online and ready.",
   "Intelligence, evolved.",
 ];
 
-function WaveformBars({ active, colors, voiceState }: { active: boolean; colors: any; voiceState: VoiceState }) {
+function WaveformBars({ active, colors, voiceState, reducedMotion }: { active: boolean; colors: any; voiceState: VoiceState; reducedMotion: boolean }) {
   const barsRef = useRef<Animated.Value[]>(
     Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.15))
   );
 
   useEffect(() => {
     const bars = barsRef.current;
-    if (!active) {
+    if (!active || reducedMotion) {
       bars.forEach(b => Animated.timing(b, { toValue: 0.15, duration: 300, useNativeDriver: true }).start());
       return;
     }
@@ -68,7 +62,7 @@ function WaveformBars({ active, colors, voiceState }: { active: boolean; colors:
       timeouts.push(t);
     });
     return () => timeouts.forEach(clearTimeout);
-  }, [active, voiceState]);
+  }, [active, voiceState, reducedMotion]);
 
   const barColor = voiceState === "speaking" ? colors.neonPurple : colors.primary;
 
@@ -125,8 +119,9 @@ function VoiceChip({ name, selected, onPress, onTest, colors }: {
 
 export function VoiceScreen() {
   const colors = useColors();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { setCurrentScreen, selectedVoice, setSelectedVoice } = useApp();
+  const { setCurrentScreen, selectedVoice, setSelectedVoice, voiceSettings } = useApp();
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
@@ -138,7 +133,7 @@ export function VoiceScreen() {
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   useEffect(() => {
-    if (voiceState !== "idle") {
+    if (voiceState !== "idle" && !reducedMotion) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(liveModePulse, { toValue: 1.04, duration: 800, useNativeDriver: true }),
@@ -148,49 +143,33 @@ export function VoiceScreen() {
     } else {
       liveModePulse.setValue(1);
     }
-  }, [voiceState]);
+  }, [voiceState, reducedMotion]);
 
   const speak = useCallback((text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (!isSpeechSynthesisAvailable()) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    const preset = PRESET_VOICES.find(p => p.name === selectedVoice);
-    if (preset) {
-      const match = voices.find(v =>
-        preset.keywords.some(k => v.name.toLowerCase().includes(k)) ||
-        v.lang.startsWith(preset.lang)
-      );
-      if (match) utterance.voice = match;
-    }
-    utterance.rate = 1.05;
-    utterance.pitch = 1.0;
-    utterance.onstart = () => setVoiceState("speaking");
-    utterance.onend = () => {
-      setVoiceState("idle");
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    };
+    const utterance = createSpeechUtterance(text, selectedVoice, voiceSettings, {
+      onStart: () => setVoiceState("speaking"),
+      onEnd: () => {
+        setVoiceState("idle");
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      },
+      onError: () => setVoiceState("idle"),
+    });
+    if (!utterance) return;
     window.speechSynthesis.speak(utterance);
-  }, [selectedVoice]);
+  }, [selectedVoice, voiceSettings]);
 
   const testVoice = useCallback((voiceName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const phrase = TEST_PHRASES[Math.floor(Math.random() * TEST_PHRASES.length)];
-    if (typeof window !== "undefined" && window.speechSynthesis) {
+    if (isSpeechSynthesisAvailable()) {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(phrase);
-      const voices = window.speechSynthesis.getVoices();
-      const preset = PRESET_VOICES.find(p => p.name === voiceName);
-      if (preset) {
-        const match = voices.find(v =>
-          preset.keywords.some(k => v.name.toLowerCase().includes(k)) ||
-          v.lang.startsWith(preset.lang)
-        );
-        if (match) utterance.voice = match;
-      }
+      const utterance = createSpeechUtterance(phrase, voiceName, voiceSettings);
+      if (!utterance) return;
       window.speechSynthesis.speak(utterance);
     }
-  }, []);
+  }, [voiceSettings]);
 
   const sendToArc = useCallback(async (text: string) => {
     if (!text.trim()) return;
@@ -340,7 +319,7 @@ export function VoiceScreen() {
       ) : (
         <View style={styles.body}>
           <View style={styles.orbWrap}>
-            <Animated.View style={{ transform: [{ scale: liveModePulse }] }}>
+            <Animated.View style={{ transform: [{ scale: reducedMotion ? 1 : liveModePulse }] }}>
               <ArcOrb size={130} pulsing={isActive} intensity={orbIntensity} />
             </Animated.View>
           </View>
@@ -361,7 +340,7 @@ export function VoiceScreen() {
             <Text style={[styles.voicePillText, { color: colors.mutedForeground }]}>{selectedVoice}</Text>
           </View>
 
-          <WaveformBars active={voiceState === "listening" || voiceState === "speaking"} colors={colors} voiceState={voiceState} />
+          <WaveformBars active={voiceState === "listening" || voiceState === "speaking"} colors={colors} voiceState={voiceState} reducedMotion={reducedMotion} />
 
           {transcript !== "" && (
             <View style={[styles.transcriptBox, { backgroundColor: colors.surface, borderColor: `rgba(0, 212, 255, 0.2)` }]}>

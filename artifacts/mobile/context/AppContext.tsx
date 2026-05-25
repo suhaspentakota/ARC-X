@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useEffect, useState } from "react";
 
 export type Screen =
   | "splash" | "home" | "chat" | "voice"
@@ -37,6 +38,14 @@ export interface Note {
   createdAt: string;
 }
 
+export interface VoiceSettings {
+  rate: number;
+  pitch: number;
+  volume: number;
+  expressiveness: number;
+  autoSpeakResponses: boolean;
+}
+
 interface AppContextType {
   currentScreen: Screen;
   setCurrentScreen: (s: Screen) => void;
@@ -60,6 +69,8 @@ interface AppContextType {
   setIsStreaming: (v: boolean) => void;
   selectedVoice: string;
   setSelectedVoice: (v: string) => void;
+  voiceSettings: VoiceSettings;
+  setVoiceSettings: React.Dispatch<React.SetStateAction<VoiceSettings>>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -80,6 +91,17 @@ const DEFAULT_NOTES: Note[] = [
   { id: "1", title: "ARC X Ideas", content: "Integrate smart home controls and expand voice commands.", createdAt: new Date().toISOString() },
 ];
 
+const VOICE_KEY = "arcx.voice.selected";
+const VOICE_SETTINGS_KEY = "arcx.voice.settings";
+
+const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+  rate: 1,
+  pitch: 1,
+  volume: 1,
+  expressiveness: 0.5,
+  autoSpeakResponses: true,
+};
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentScreen, setCurrentScreen] = useState<Screen>("splash");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -92,6 +114,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [aiPersonality, setAiPersonality] = useState("Professional");
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState("Nova");
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(DEFAULT_VOICE_SETTINGS);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [savedVoice, savedSettings] = await Promise.all([
+          AsyncStorage.getItem(VOICE_KEY),
+          AsyncStorage.getItem(VOICE_SETTINGS_KEY),
+        ]);
+        if (!mounted) return;
+        if (savedVoice) setSelectedVoice(savedVoice);
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings) as Partial<VoiceSettings>;
+          setVoiceSettings({
+            ...DEFAULT_VOICE_SETTINGS,
+            ...parsed,
+          });
+        }
+      } catch {
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem(VOICE_KEY, selectedVoice).catch(() => {});
+  }, [selectedVoice]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(voiceSettings)).catch(() => {});
+  }, [voiceSettings]);
 
   return (
     <AppContext.Provider value={{
@@ -106,6 +160,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       aiPersonality, setAiPersonality,
       isStreaming, setIsStreaming,
       selectedVoice, setSelectedVoice,
+      voiceSettings, setVoiceSettings,
     }}>
       {children}
     </AppContext.Provider>
