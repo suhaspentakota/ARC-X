@@ -22,6 +22,8 @@ const SUGGESTIONS = [
   "Explain quantum computing",
   "Generate an image of a nebula",
 ];
+const REVEAL_CHUNKS = 36;
+const REVEAL_FRAME_MS = 18;
 
 function AnimatedMessageBubble({
   msg,
@@ -291,7 +293,7 @@ export function ChatScreen() {
       return;
     }
 
-    const chunkSize = Math.max(1, Math.round(fullText.length / 36));
+    const chunkSize = Math.max(1, Math.round(fullText.length / REVEAL_CHUNKS));
     let index = 0;
     await new Promise<void>((resolve) => {
       const tick = () => {
@@ -303,7 +305,7 @@ export function ChatScreen() {
           resolve();
           return;
         }
-        revealTimeoutRef.current = setTimeout(tick, 18);
+        revealTimeoutRef.current = setTimeout(tick, REVEAL_FRAME_MS);
       };
       tick();
     });

@@ -102,6 +102,12 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   autoSpeakResponses: true,
 };
 
+const logStorageWarning = (message: string, error: unknown) => {
+  if (__DEV__) {
+    console.warn(message, error);
+  }
+};
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentScreen, setCurrentScreen] = useState<Screen>("splash");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -133,18 +139,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ...parsed,
           });
         }
-      } catch {
+      } catch (error) {
+        logStorageWarning("Failed to restore voice settings from storage", error);
       }
     })();
     return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
-    AsyncStorage.setItem(VOICE_KEY, selectedVoice).catch(() => {});
+    AsyncStorage.setItem(VOICE_KEY, selectedVoice).catch((error) => {
+      logStorageWarning("Failed to persist selected voice", error);
+    });
   }, [selectedVoice]);
 
   useEffect(() => {
-    AsyncStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(voiceSettings)).catch(() => {});
+    AsyncStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(voiceSettings)).catch((error) => {
+      logStorageWarning("Failed to persist voice settings", error);
+    });
   }, [voiceSettings]);
 
   return (

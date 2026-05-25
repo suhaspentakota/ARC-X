@@ -16,6 +16,8 @@ export const PRESET_VOICES: VoicePreset[] = [
 ];
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const EXPRESSIVENESS_RATE_MULTIPLIER = 0.08;
+const EXPRESSIVENESS_PITCH_MULTIPLIER = 0.15;
 
 export function isSpeechSynthesisAvailable() {
   return typeof window !== "undefined" && !!window.speechSynthesis;
@@ -50,8 +52,8 @@ export function createSpeechUtterance(
   }
 
   const styleBoost = clamp(settings.expressiveness, 0, 1);
-  utterance.rate = clamp(settings.rate * (1 + styleBoost * 0.08), 0.5, 2);
-  utterance.pitch = clamp(settings.pitch * (1 + styleBoost * 0.15), 0, 2);
+  utterance.rate = clamp(settings.rate * (1 + styleBoost * EXPRESSIVENESS_RATE_MULTIPLIER), 0.5, 2);
+  utterance.pitch = clamp(settings.pitch * (1 + styleBoost * EXPRESSIVENESS_PITCH_MULTIPLIER), 0, 2);
   utterance.volume = clamp(settings.volume, 0, 1);
   utterance.onstart = handlers?.onStart ?? null;
   utterance.onend = handlers?.onEnd ?? null;

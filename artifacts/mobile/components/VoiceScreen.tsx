@@ -28,6 +28,10 @@ const STATE_LABELS: Record<VoiceState, string> = {
 };
 
 const BAR_COUNT = 24;
+const IDLE_BAR_HEIGHT = 0.15;
+const SPEAKING_BAR_BASE = 0.3;
+const SPEAKING_BAR_PEAK = 0.95;
+const ACTIVE_BAR_PEAK = 0.85;
 
 const TEST_PHRASES = [
   "ARC X systems are fully operational.",
@@ -37,20 +41,20 @@ const TEST_PHRASES = [
 
 function WaveformBars({ active, colors, voiceState, reducedMotion }: { active: boolean; colors: any; voiceState: VoiceState; reducedMotion: boolean }) {
   const barsRef = useRef<Animated.Value[]>(
-    Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.15))
+    Array.from({ length: BAR_COUNT }, () => new Animated.Value(IDLE_BAR_HEIGHT))
   );
 
   useEffect(() => {
     const bars = barsRef.current;
     if (!active || reducedMotion) {
-      bars.forEach(b => Animated.timing(b, { toValue: 0.15, duration: 300, useNativeDriver: true }).start());
+      bars.forEach(b => Animated.timing(b, { toValue: IDLE_BAR_HEIGHT, duration: 300, useNativeDriver: true }).start());
       return;
     }
     const timeouts: ReturnType<typeof setTimeout>[] = [];
     bars.forEach((b, i) => {
       const loop = () => {
-        const base = voiceState === "speaking" ? 0.3 : 0.15;
-        const peak = voiceState === "speaking" ? 0.95 : 0.85;
+        const base = voiceState === "speaking" ? SPEAKING_BAR_BASE : IDLE_BAR_HEIGHT;
+        const peak = voiceState === "speaking" ? SPEAKING_BAR_PEAK : ACTIVE_BAR_PEAK;
         const h = base + Math.random() * (peak - base);
         Animated.timing(b, {
           toValue: h,
