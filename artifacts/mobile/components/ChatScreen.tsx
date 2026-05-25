@@ -9,6 +9,8 @@ import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useApp, ChatMessage } from "@/context/AppContext";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { createSpeechUtterance, isSpeechSynthesisAvailable } from "@/lib/tts";
 
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
@@ -20,26 +22,45 @@ const SUGGESTIONS = [
   "Explain quantum computing",
   "Generate an image of a nebula",
 ];
+const DEFAULT_FALLBACK_MESSAGE = "I received your request.";
+const MIN_REVEAL_CHUNK_SIZE = 3;
+const REVEAL_CHUNKS = 36;
+const REVEAL_FRAME_MS = 18;
 
-function AnimatedMessageBubble({ msg, colors }: { msg: ChatMessage; colors: any }) {
+function AnimatedMessageBubble({
+  msg,
+  colors,
+  reducedMotion,
+  isSpeaking,
+}: {
+  msg: ChatMessage;
+  colors: any;
+  reducedMotion: boolean;
+  isSpeaking: boolean;
+}) {
   const slideY = useRef(new Animated.Value(16)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (reducedMotion) return;
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 280, useNativeDriver: true }),
       Animated.spring(slideY, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [reducedMotion]);
+
+  if (reducedMotion) {
+    return <MessageBubble msg={msg} colors={colors} reducedMotion={true} isSpeaking={isSpeaking} />;
+  }
 
   return (
     <Animated.View style={{ opacity, transform: [{ translateY: slideY }] }}>
-      <MessageBubble msg={msg} colors={colors} />
+      <MessageBubble msg={msg} colors={colors} reducedMotion={false} isSpeaking={isSpeaking} />
     </Animated.View>
   );
 }
 
-function MessageBubble({ msg, colors }: { msg: ChatMessage; colors: any }) {
+function MessageBubble({ msg, colors, reducedMotion, isSpeaking }: { msg: ChatMessage; colors: any; reducedMotion: boolean; isSpeaking: boolean }) {
   const isUser = msg.role === "user";
   if (msg.imageUrl) {
     return (
@@ -82,7 +103,7 @@ function MessageBubble({ msg, colors }: { msg: ChatMessage; colors: any }) {
       ]}>
         {msg.streaming && msg.content === "" ? (
           <View style={styles.typingRow}>
-            <TypingDots colors={colors} />
+            <TypingDots colors={colors} reducedMotion={reducedMotion} />
           </View>
         ) : (
           <Text style={[styles.bubbleText, { color: isUser ? colors.primaryForeground : colors.foreground }]}>
@@ -90,7 +111,10 @@ function MessageBubble({ msg, colors }: { msg: ChatMessage; colors: any }) {
           </Text>
         )}
         {msg.streaming && msg.content !== "" && (
-          <StreamCursor colors={colors} />
+          <StreamCursor colors={colors} reducedMotion={reducedMotion} />
+        )}
+        {!isUser && isSpeaking && (
+          <SpeakingIndicator colors={colors} reducedMotion={reducedMotion} />
         )}
       </View>
     </View>
@@ -108,7 +132,10 @@ function GeneratedImage({ base64, colors }: { base64: string; colors: any }) {
   );
 }
 
-function StreamCursor({ colors }: { colors: any }) {
+function StreamCursor({ colors, reducedMotion }: { colors: any; reducedMotion: boolean }) {
+  if (reducedMotion) {
+    return <View style={[styles.streamCursor, { backgroundColor: colors.primary, opacity: 0.8 }]} />;
+  }
   const blink = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     Animated.loop(
@@ -121,7 +148,14 @@ function StreamCursor({ colors }: { colors: any }) {
   return <Animated.View style={[styles.streamCursor, { backgroundColor: colors.primary, opacity: blink }]} />;
 }
 
-function TypingDots({ colors }: { colors: any }) {
+function TypingDots({ colors, reducedMotion }: { colors: any; reducedMotion: boolean }) {
+  if (reducedMotion) {
+    return (
+      <View style={styles.dotsRow}>
+        <View style={[styles.dot, { backgroundColor: colors.primary, opacity: 0.8 }]} />
+      </View>
+    );
+  }
   const dotsRef = useRef([
     new Animated.Value(0.3),
     new Animated.Value(0.3),
@@ -145,13 +179,69 @@ function TypingDots({ colors }: { colors: any }) {
   );
 }
 
+function SpeakingIndicator({ colors, reducedMotion }: { colors: any; reducedMotion: boolean }) {
+  const pulse = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    if (reducedMotion) return;
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 480, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.35, duration: 480, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [pulse, reducedMotion]);
+
+  if (reducedMotion) {
+    return (
+      <View style={styles.speakingRow}>
+        <View style={[styles.speakingDot, { backgroundColor: colors.neonPurple }]} />
+        <Text style={[styles.speakingLabel, { color: colors.mutedForeground }]}>Speaking…</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.speakingRow}>
+      <Animated.View style={[styles.speakingDot, { backgroundColor: colors.neonPurple, opacity: pulse }]} />
+      <Text style={[styles.speakingLabel, { color: colors.mutedForeground }]}>Speaking…</Text>
+    </View>
+  );
+}
+
 export function ChatScreen() {
   const colors = useColors();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { setCurrentScreen, messages, setMessages, conversationId, setConversationId, isStreaming, setIsStreaming, userName } = useApp();
+  const {
+    setCurrentScreen,
+    messages,
+    setMessages,
+    conversationId,
+    setConversationId,
+    isStreaming,
+    setIsStreaming,
+    userName,
+    selectedVoice,
+    voiceSettings,
+  } = useApp();
   const [inputText, setInputText] = useState("");
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const cleanup = () => {
+      if (revealTimeoutRef.current) {
+        clearTimeout(revealTimeoutRef.current);
+      }
+      if (isSpeechSynthesisAvailable()) {
+        window.speechSynthesis.cancel();
+      }
+    };
+    return cleanup;
+  }, []);
 
   const getOrCreateConversation = useCallback(async (): Promise<number> => {
     if (conversationId) return conversationId;
@@ -189,6 +279,49 @@ export function ChatScreen() {
       setMessages(prev => prev.map(m => m.id === imgMsgId ? { ...m, imageUrl: "error" } : m));
     }
   }, []);
+
+  const speakAssistantReply = useCallback((messageId: string, text: string) => {
+    if (!voiceSettings.autoSpeakResponses || !text.trim() || !isSpeechSynthesisAvailable()) return;
+    const clearSpeakingIndicator = () => {
+      setSpeakingMessageId(prev => (prev === messageId ? null : prev));
+    };
+    setSpeakingMessageId(null);
+    window.speechSynthesis.cancel();
+    const utterance = createSpeechUtterance(text, selectedVoice, voiceSettings, {
+      onStart: () => setSpeakingMessageId(messageId),
+      onEnd: clearSpeakingIndicator,
+      onError: clearSpeakingIndicator,
+    });
+    if (!utterance) return;
+    window.speechSynthesis.speak(utterance);
+  }, [selectedVoice, voiceSettings]);
+
+  const revealAssistantReply = useCallback(async (messageId: string, fullText: string) => {
+    if (reducedMotion || fullText.length < 2) {
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: fullText, streaming: false } : m));
+      return;
+    }
+
+    const chunkSize = Math.max(
+      MIN_REVEAL_CHUNK_SIZE,
+      Math.ceil(fullText.length / REVEAL_CHUNKS)
+    );
+    let index = 0;
+    await new Promise<void>((resolve) => {
+      const tick = () => {
+        index = Math.min(fullText.length, index + chunkSize);
+        const nextText = fullText.slice(0, index);
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: nextText, streaming: true } : m));
+        if (index >= fullText.length) {
+          setMessages(prev => prev.map(m => m.id === messageId ? { ...m, streaming: false } : m));
+          resolve();
+          return;
+        }
+        revealTimeoutRef.current = setTimeout(tick, REVEAL_FRAME_MS);
+      };
+      tick();
+    });
+  }, [reducedMotion, setMessages]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isStreaming) return;
@@ -262,12 +395,18 @@ export function ChatScreen() {
                   setMessages(prev =>
                     prev.map(m => m.id === aiMsgId ? { ...m, streaming: false } : m)
                   );
+                  speakAssistantReply(aiMsgId, accumulated);
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }
               } catch {}
             }
           }
         }
+      } else {
+        const fallbackText = await response.text();
+        const resolvedFallback = fallbackText || DEFAULT_FALLBACK_MESSAGE;
+        await revealAssistantReply(aiMsgId, resolvedFallback);
+        speakAssistantReply(aiMsgId, resolvedFallback);
       }
     } catch {
       setMessages(prev =>
@@ -278,7 +417,7 @@ export function ChatScreen() {
     } finally {
       setIsStreaming(false);
     }
-  }, [isStreaming, getOrCreateConversation, generateImage]);
+  }, [isStreaming, getOrCreateConversation, generateImage, revealAssistantReply, setMessages, setIsStreaming, speakAssistantReply]);
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
@@ -296,6 +435,10 @@ export function ChatScreen() {
           onPress={() => {
             setMessages([]);
             setConversationId(null);
+            setSpeakingMessageId(null);
+            if (isSpeechSynthesisAvailable()) {
+              window.speechSynthesis.cancel();
+            }
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           style={styles.clearBtn}
@@ -336,7 +479,14 @@ export function ChatScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
-            renderItem={({ item }) => <AnimatedMessageBubble msg={item} colors={colors} />}
+            renderItem={({ item }) => (
+              <AnimatedMessageBubble
+                msg={item}
+                colors={colors}
+                reducedMotion={reducedMotion}
+                isSpeaking={speakingMessageId === item.id}
+              />
+            )}
           />
         )}
 
@@ -413,6 +563,9 @@ const styles = StyleSheet.create({
   typingRow: { paddingVertical: 4 },
   dotsRow: { flexDirection: "row", gap: 5, alignItems: "center" },
   dot: { width: 7, height: 7, borderRadius: 3.5 },
+  speakingRow: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 6 },
+  speakingDot: { width: 7, height: 7, borderRadius: 3.5 },
+  speakingLabel: { fontSize: 11, fontFamily: "Inter_400Regular" },
   imageContainer: { maxWidth: "85%" },
   imagePromptLabel: { fontSize: 10, fontFamily: "Inter_400Regular", letterSpacing: 0.5, marginBottom: 6 },
   imagePlaceholder: {
