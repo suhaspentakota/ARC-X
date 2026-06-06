@@ -61,3 +61,25 @@ ARC X includes smooth animations when the assistant responds:
 - Reduced-motion is respected for users with motion sensitivity
 - Keyboard navigation is fully supported
 - Speech synthesis availability is detected and communicated to users
+
+## Web Preview Deployment
+
+ARC X now supports Expo Web static export and GitHub Pages preview deployment.
+
+- **Live preview URL:** https://suhaspentakota.github.io/ARC-X/
+- **Mobile web export command:** `pnpm --filter @workspace/mobile run web:build`
+- **Workspace web export command:** `pnpm run build:web`
+
+### Automatic Deployment
+
+The workflow at `.github/workflows/deploy-web.yml` automatically:
+1. Installs dependencies
+2. Builds the Expo Web bundle (`artifacts/mobile/dist`)
+3. Deploys the static output to GitHub Pages on every push to `main`
+
+### Local Web Preview
+
+To test the browser preview locally:
+1. `pnpm install --frozen-lockfile`
+2. `pnpm --filter @workspace/mobile run web:dev` (interactive dev preview)
+3. Or `pnpm --filter @workspace/mobile run web:build` and serve `artifacts/mobile/dist`
