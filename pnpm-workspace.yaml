@@ -70,7 +70,7 @@ autoInstallPeers: false
 
 onlyBuiltDependencies:
   - '@swc/core'
-  - esbuild
+  - esbuild@0.27.3
   - msw
   - unrs-resolver
 
