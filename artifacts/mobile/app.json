@@ -32,11 +32,6 @@
       "expo-font",
       "expo-web-browser"
     ],
-    "extra": {
-      "router": {
-        "basename": "/ARC-X"
-      }
-    },
     "experiments": {
       "typedRoutes": true,
       "baseUrl": "/ARC-X"
