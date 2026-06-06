@@ -1,45 +1,63 @@
-# [Project name]
+# ARC X Documentation
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+## Voice & TTS Configuration
 
-## Run & Operate
+ARC X uses the **Web Speech API** for text-to-speech (TTS) with configurable prosody controls ("talkness").
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+### Supported Voices
 
-## Stack
+ARC X includes 6 voice presets:
+- **Nova** – Balanced, friendly tone
+- **Alloy** – Clear, professional
+- **Echo** – Resonant, warm
+- **Fable** – Narrative, expressive
+- **Onyx** – Deep, authoritative
+- **Shimmer** – Bright, energetic
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+### Talkness Controls
 
-## Where things live
+Users can adjust the following voice characteristics:
+- **Speaking Rate** (0.1x – 2.0x): Controls how fast the assistant speaks
+- **Pitch** (0 – 2.0): Adjusts the frequency of the voice
+- **Volume** (0 – 100%): Controls output loudness
+- **Expressiveness** (0 – 1.0): Optional parameter for future TTS provider integration
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+### Web Speech API Fallback
 
-## Architecture decisions
+ARC X defaults to the browser's Web Speech API, which:
+- **Requires no API keys** or external credentials
+- Works offline
+- Supports voice selection and prosody control
+- May vary in available voices across browsers
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+If Web Speech is unavailable in your browser, voice output is gracefully disabled with a user notice.
 
-## Product
+### How to Use
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+1. **Select a Voice**: Open Settings → Voice Settings and choose a voice preset
+2. **Adjust Talkness**: Use the increment/decrement buttons for rate, pitch, volume
+3. **Preview**: Click "Preview Voice" to hear your current settings
+4. **Auto-Speak**: Enable "Auto-speak assistant responses" to hear replies automatically
 
-## User preferences
+### Persisted Preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+Your voice and talkness settings are saved locally and restored on app launch.
 
-## Gotchas
+### Future Integrations
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+To integrate a premium TTS provider (OpenAI, Google Cloud, etc.), update `artifacts/mobile/lib/tts.ts` and extend the `VoiceSettings` interface with provider-specific parameters.
 
-## Pointers
+## Response Animations
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+ARC X includes smooth animations when the assistant responds:
+- **Streaming Cursor**: Animated blinking cursor during token flow
+- **Reveal Animation**: Text reveal effect for non-streamed responses
+- **Speaking Indicator**: Animated pulse bars when audio is playing
+- **Reduced Motion Support**: All animations respect the user's accessibility preference (prefers-reduced-motion)
+
+## Accessibility
+
+- All voice controls include ARIA labels and accessibility hints
+- Reduced-motion is respected for users with motion sensitivity
+- Keyboard navigation is fully supported
+- Speech synthesis availability is detected and communicated to users

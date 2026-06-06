@@ -1,119 +1,107 @@
-import React, { createContext, useContext, useState } from "react";
-
-export type Screen =
-  | "splash" | "home" | "chat" | "voice"
-  | "automation" | "productivity" | "settings"
-  | "imagegen" | "videogen";
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-  streaming?: boolean;
-  imageUrl?: string;
-}
-
-export interface Task {
-  id: string;
-  title: string;
-  completed: boolean;
-  dueDate?: string;
-  priority: "low" | "medium" | "high";
-}
-
-export interface Routine {
-  id: string;
-  name: string;
-  time: string;
-  enabled: boolean;
-  actions: string[];
-}
-
-export interface Note {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: string;
-}
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { VoiceSettings, DEFAULT_VOICE_SETTINGS } from '../lib/tts';
 
 interface AppContextType {
-  currentScreen: Screen;
-  setCurrentScreen: (s: Screen) => void;
-  messages: ChatMessage[];
-  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
-  conversationId: number | null;
-  setConversationId: (id: number | null) => void;
-  isVoiceActive: boolean;
-  setIsVoiceActive: (v: boolean) => void;
-  tasks: Task[];
-  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
-  routines: Routine[];
-  setRoutines: React.Dispatch<React.SetStateAction<Routine[]>>;
-  notes: Note[];
-  setNotes: React.Dispatch<React.SetStateAction<Note[]>>;
-  userName: string;
-  setUserName: (n: string) => void;
-  aiPersonality: string;
-  setAiPersonality: (p: string) => void;
-  isStreaming: boolean;
-  setIsStreaming: (v: boolean) => void;
-  selectedVoice: string;
-  setSelectedVoice: (v: string) => void;
+  selectedVoice: string | undefined;
+  setSelectedVoice: (voiceId: string | undefined) => Promise<void>;
+  voiceSettings: VoiceSettings;
+  setVoiceSettings: (settings: VoiceSettings) => Promise<void>;
+  autoSpeakResponses: boolean;
+  setAutoSpeakResponses: (auto: boolean) => Promise<void>;
 }
 
-const AppContext = createContext<AppContextType | null>(null);
+const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const DEFAULT_TASKS: Task[] = [
-  { id: "1", title: "Review mission briefing", completed: false, priority: "high", dueDate: "Today" },
-  { id: "2", title: "System optimization check", completed: true, priority: "medium" },
-  { id: "3", title: "Schedule weekly sync", completed: false, priority: "low", dueDate: "Tomorrow" },
-];
+const STORAGE_KEYS = {
+  SELECTED_VOICE: 'arc_selected_voice',
+  VOICE_SETTINGS: 'arc_voice_settings',
+  AUTO_SPEAK: 'arc_auto_speak_responses',
+};
 
-const DEFAULT_ROUTINES: Routine[] = [
-  { id: "1", name: "Morning Briefing", time: "07:00", enabled: true, actions: ["Weather", "Calendar", "News"] },
-  { id: "2", name: "Focus Mode", time: "09:00", enabled: true, actions: ["DND", "Productivity", "Timer"] },
-  { id: "3", name: "Evening Wind Down", time: "21:00", enabled: false, actions: ["Summary", "Tomorrow", "Relax"] },
-];
+export function AppContextProvider({ children }: { children: React.ReactNode }) {
+  const [selectedVoice, setSelectedVoiceState] = useState<string | undefined>();
+  const [voiceSettings, setVoiceSettingsState] = useState<VoiceSettings>(DEFAULT_VOICE_SETTINGS);
+  const [autoSpeakResponses, setAutoSpeakResponsesState] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-const DEFAULT_NOTES: Note[] = [
-  { id: "1", title: "ARC X Ideas", content: "Integrate smart home controls and expand voice commands.", createdAt: new Date().toISOString() },
-];
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const [voice, settings, autoSpeak] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.SELECTED_VOICE),
+          AsyncStorage.getItem(STORAGE_KEYS.VOICE_SETTINGS),
+          AsyncStorage.getItem(STORAGE_KEYS.AUTO_SPEAK),
+        ]);
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [currentScreen, setCurrentScreen] = useState<Screen>("splash");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [conversationId, setConversationId] = useState<number | null>(null);
-  const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>(DEFAULT_TASKS);
-  const [routines, setRoutines] = useState<Routine[]>(DEFAULT_ROUTINES);
-  const [notes, setNotes] = useState<Note[]>(DEFAULT_NOTES);
-  const [userName, setUserName] = useState("Commander");
-  const [aiPersonality, setAiPersonality] = useState("Professional");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [selectedVoice, setSelectedVoice] = useState("Nova");
+        if (voice) setSelectedVoiceState(voice);
+        if (settings) setVoiceSettingsState(JSON.parse(settings));
+        if (autoSpeak !== null) setAutoSpeakResponsesState(autoSpeak === 'true');
+      } catch (error) {
+        console.warn('Failed to load voice settings:', error);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+
+    loadSettings();
+  }, []);
+
+  const setSelectedVoice = async (voiceId: string | undefined) => {
+    setSelectedVoiceState(voiceId);
+    try {
+      if (voiceId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.SELECTED_VOICE, voiceId);
+      } else {
+        await AsyncStorage.removeItem(STORAGE_KEYS.SELECTED_VOICE);
+      }
+    } catch (error) {
+      console.warn('Failed to save selected voice:', error);
+    }
+  };
+
+  const setVoiceSettings = async (settings: VoiceSettings) => {
+    setVoiceSettingsState(settings);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.VOICE_SETTINGS, JSON.stringify(settings));
+    } catch (error) {
+      console.warn('Failed to save voice settings:', error);
+    }
+  };
+
+  const setAutoSpeakResponses = async (auto: boolean) => {
+    setAutoSpeakResponsesState(auto);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTO_SPEAK, auto ? 'true' : 'false');
+    } catch (error) {
+      console.warn('Failed to save auto-speak preference:', error);
+    }
+  };
+
+  if (!isLoaded) {
+    return null;
+  }
 
   return (
-    <AppContext.Provider value={{
-      currentScreen, setCurrentScreen,
-      messages, setMessages,
-      conversationId, setConversationId,
-      isVoiceActive, setIsVoiceActive,
-      tasks, setTasks,
-      routines, setRoutines,
-      notes, setNotes,
-      userName, setUserName,
-      aiPersonality, setAiPersonality,
-      isStreaming, setIsStreaming,
-      selectedVoice, setSelectedVoice,
-    }}>
+    <AppContext.Provider
+      value={{
+        selectedVoice,
+        setSelectedVoice,
+        voiceSettings,
+        setVoiceSettings,
+        autoSpeakResponses,
+        setAutoSpeakResponses,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
 }
 
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error("useApp must be used within AppProvider");
-  return ctx;
+export function useAppContext() {
+  const context = useContext(AppContext);
+  if (context === undefined) {
+    throw new Error('useAppContext must be used within AppContextProvider');
+  }
+  return context;
 }
